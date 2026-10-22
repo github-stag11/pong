@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MatchSim, MAX_DT, BOT_ID } from '../src/sim-core.js';
+import { createState, applyRoster, applySnapshot } from '../src/game.js';
 
 const seeded = (seed) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 
@@ -89,4 +90,13 @@ test('a miss flags the roster as changed', () => {
   }
   assert.ok(flagged, 'expected a miss');
   assert.equal(sim.state.players[0].lost, 1);
+});
+
+test('the host applies every paddle position, including the AI at id -1', () => {
+  const sim = new MatchSim(0, 'Host', seeded(3));
+  sim.setPos(BOT_ID, 0.5);
+  const mirror = createState();
+  applyRoster(mirror, sim.roster().players);
+  applySnapshot(mirror, sim.snapshot(), sim.rv, null);
+  assert.equal(mirror.players.find((p) => p.id === BOT_ID).pos, 0.5);
 });
