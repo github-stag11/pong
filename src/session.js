@@ -95,7 +95,7 @@ export class HostSession {
       applySnapshot(this.state, msg.snap, this.rv, -1);
       for (const e of msg.events) {
         this.hooks.onEvent?.(e);
-        this.broadcast('ctrl', { t: 'ev', e: e.type, id: e.id });
+        this.broadcast('ctrl', { t: 'ev', e: e.type, id: e.id, k: e.kind });
       }
       if (msg.send) this.broadcast('stream', msg.snap);
     }
@@ -222,7 +222,7 @@ export class ClientSession {
       this.rv = msg.rv;
       applyRoster(this.state, msg.players);
     } else if (msg.t === 'ev') {
-      this.hooks.onEvent?.({ type: msg.e, id: msg.id });
+      this.hooks.onEvent?.({ type: msg.e, id: msg.id, kind: msg.k });
     }
   }
 
@@ -240,11 +240,12 @@ export class ClientSession {
     const me = this.state.players.find((p) => p.id === this.myId);
     if (me && this.input) me.pos = clampPos(me.pos + this.input * PADDLE_RATE * dt);
 
-    // Dead-reckon the ball between snapshots; the host stays authoritative.
-    const b = this.state.ball;
+    // Dead-reckon the balls between snapshots; the host stays authoritative.
     if (this.state.serve <= 0) {
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
+      for (const b of this.state.balls) {
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+      }
     } else {
       this.state.serve = Math.max(0, this.state.serve - dt);
     }

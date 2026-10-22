@@ -30,16 +30,16 @@ test('snapshot carries the current roster version and sequence', () => {
   const snap = sim.snapshot();
   assert.equal(snap[0], sim.seq);
   assert.equal(snap[1], sim.roster().rv);
-  assert.equal(snap.length, 7 + sim.state.players.length);
+  assert.equal(snap.length, 5 + 4 * sim.state.players.length);
 });
 
 test('setPos clamps the paddle into the arena', () => {
   const sim = new MatchSim(0, 'Host', seeded(3));
   sim.addPlayer(5, 'Bob');
   sim.setPos(5, 5);
-  assert.equal(sim.snapshot()[8], 1);
+  assert.equal(sim.snapshot().at(-4), 1);
   sim.setPos(5, -9);
-  assert.equal(sim.snapshot()[8], -1);
+  assert.equal(sim.snapshot().at(-4), -1);
 });
 
 test('setInput moves the host paddle over time', () => {
@@ -62,7 +62,7 @@ test('a miss flags the roster as changed', () => {
   sim.addPlayer(5, 'Bob');
   sim.state.serve = 0;
   // Aim at the host's side (side 0) off-centre while the host paddle sits at the far end.
-  sim.state.ball = { x: 0, y: 0, vx: 0.17, vy: 0.42 };
+  sim.state.balls = [{ x: 0, y: 0, vx: 0.17, vy: 0.42, last: null }];
   sim.setPos(0, -1);
   let flagged = false;
   for (let i = 0; i < 300 && !flagged; i++) {

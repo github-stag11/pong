@@ -11,6 +11,9 @@ Create a playable, browser-based multiplayer Pong game with a space theme. Build
 - Keep the match running indefinitely; there is no winner or win condition.
 - When a player misses the ball, increment that player's lost-points counter, reset the ball, and continue play.
 - Display each player's lost-points total.
+- Timed bonuses: a pickup appears at a random spot in the arena and expires after about 10 seconds if nobody takes it. At most two pickups are on the field, and new ones spawn every 8 to 15 seconds.
+- Only the paddle that hit the ball last can collect a pickup it touches. Nobody collects while the ball is in play with no last hitter.
+- Bonus types: `big` (the collector's paddle grows 1.5x for 8 seconds), `small` (every rival's paddle shrinks to 0.6x for 8 seconds), `multi` (the ball splits into extra balls, up to 3 at once; a miss removes only that ball), `shield` (the collector's next would-be miss reflects the ball instead, for up to 8 seconds), and `speed` (the ball speed changes randomly, up or down, and is clamped to a safe range).
 - Do not impose a fixed player-count cap in the game logic. The practical maximum will depend on browser, device, and network limits.
 
 ## Multiplayer and deployment

@@ -2,6 +2,7 @@ import { HostSession, ClientSession } from './session.js';
 import { findHost, hostLobby, joinHost, newId } from './lobby.js';
 import { Renderer, playerColor } from './render.js';
 import { unlockAudio, playEvent, setMuted, isMuted } from './sound.js';
+import { BONUS_COLORS, BONUS_LABELS, BONUS_TAGS, TIMED_EFFECTS } from './bonus.js';
 
 const $ = (id) => document.getElementById(id);
 const show = (el, on = true) => el.classList.toggle('hidden', !on);
@@ -68,7 +69,7 @@ $('btn-play').onclick = async () => {
 
 async function hostGame(name) {
   setStatus('No match found. Starting one…');
-  const host = (session = new HostSession(name, { onEvent: playEvent, onPeer, onFailure: onSimFailure }));
+  const host = (session = new HostSession(name, { onEvent: onGameEvent, onPeer, onFailure: onSimFailure }));
   lobby = await hostLobby({
     id: newId(),
     name: name || 'Host',
@@ -93,7 +94,7 @@ function onSimFailure(message) {
 async function joinGame(name, host) {
   setStatus(`Joining ${host.name || 'the match'}…`);
   session = new ClientSession(name, {
-    onEvent: playEvent,
+    onEvent: onGameEvent,
     onJoined: () => {
       clearTimeout(connectTimer);
       enterGame(`Joined ${host.name || 'the match'}`);
@@ -120,6 +121,17 @@ window.addEventListener('pagehide', () => lobby?.close());
 function onPeer(peer) {
   if (peer.status === 'connected') toast(`${peer.name} joined`);
   else if (peer.status === 'closed' && peer.name) toast(`${peer.name} left`);
+}
+
+// ---- Bonus notices ----
+
+function onGameEvent(e) {
+  playEvent(e.type);
+  if (e.type === 'collect') toast(`${nameOf(e.id)} got ${BONUS_LABELS[e.kind]}`);
+}
+
+function nameOf(id) {
+  return session?.state.players.find((p) => p.id === id)?.name || 'Someone';
 }
 
 // ---- Input ----
@@ -175,7 +187,9 @@ function startLoop() {
 
 function updateScores() {
   const players = session.state.players;
-  const signature = players.map((p) => `${p.id}|${p.name}|${p.lost}`).join(';') + `@${session.myId}`;
+  const signature =
+    players.map((p) => `${p.id}|${p.name}|${p.lost}|${TIMED_EFFECTS.filter((k) => p.fx[k]).join(',')}`).join(';') +
+    `@${session.myId}`;
   if (signature === lastSignature) return;
   lastSignature = signature;
   const list = $('score-list');
@@ -191,7 +205,14 @@ function updateScores() {
       const pts = document.createElement('span');
       pts.className = 'pts';
       pts.textContent = p.lost;
-      li.append(dot, nm, pts);
+      const tags = TIMED_EFFECTS.filter((k) => p.fx[k]).map((k) => {
+        const tag = document.createElement('span');
+        tag.className = 'fx';
+        tag.style.background = BONUS_COLORS[k];
+        tag.textContent = BONUS_TAGS[k];
+        return tag;
+      });
+      li.append(dot, nm, ...tags, pts);
       return li;
     }),
   );

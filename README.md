@@ -11,6 +11,7 @@ Controls: `←` `→` or `A` `D` to move your paddle, `M` to mute.
 
 Rules: every player defends one side of a polygon that gains a side per player (2 players or fewer play on a square). Missing the ball adds to your *lost points*; the ball resets and play continues forever. There is no winner and no fixed player cap.
 
+Bonuses: pickups pop up in the arena and vanish after about 10 seconds. The player whose paddle hit the ball last can collect a pickup by touching it. Big (your paddle 1.5x for 8 s), small (rivals' paddles 0.6x for 8 s), multi-ball (splits the ball, up to 3), shield (reflects your next miss, 8 s), and speed (random faster or slower ball). Effects show as tags in the score list.
 ## Networking notes
 
 - There is one shared lobby. Players find the match through a public MQTT broker (`wss://broker.hivemq.com:8884/mqtt`) that only relays the connection setup (SDP offers and answers). The broker never sees game traffic and there is no game server.

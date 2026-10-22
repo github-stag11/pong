@@ -32,4 +32,8 @@ export function playEvent(type) {
   if (type === 'hit') beep(520, 0.08, 'triangle');
   else if (type === 'wall') beep(260, 0.05, 'sine', 0.035);
   else if (type === 'miss') beep(110, 0.35, 'sawtooth', 0.07);
+  else if (type === 'collect') {
+    beep(880, 0.12, 'triangle', 0.07);
+    beep(1320, 0.18, 'sine', 0.05);
+  } else if (type === 'shield') beep(330, 0.25, 'square', 0.04);
 }
