@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Space Pong</title>
+  <meta name="description" content="Peer-to-peer multiplayer Pong in a polygon arena, played in space.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='%23ffd27a'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <main id="menu" class="panel center">
+    <h1>Space Pong</h1>
+    <p class="tag">One arena. One side per player. Endless play.</p>
+    <label>Callsign
+      <input id="name" maxlength="16" placeholder="Pilot" autocomplete="off">
+    </label>
+    <div class="row">
+      <button id="btn-host" class="primary">Host a match</button>
+      <button id="btn-join">Join a match</button>
+    </div>
+    <p class="hint">Direct peer-to-peer connection &mdash; no game server. The host shares a code with each player by chat or e-mail.</p>
+  </main>
+
+  <section id="join" class="panel center hidden">
+    <h2>Join a match</h2>
+    <ol class="steps">
+      <li>
+        <span>Paste the <b>offer code</b> from the host</span>
+        <textarea id="offer-in" rows="3" spellcheck="false" placeholder="z.…"></textarea>
+        <button id="btn-answer" class="primary">Create answer</button>
+      </li>
+      <li id="step-answer" class="hidden">
+        <span>Send this <b>answer code</b> back to the host</span>
+        <textarea id="answer-out" rows="3" readonly spellcheck="false"></textarea>
+        <button id="btn-copy-answer">Copy</button>
+      </li>
+    </ol>
+    <p id="join-status" class="status"></p>
+    <button id="btn-join-back" class="link">&larr; Back</button>
+  </section>
+
+  <section id="hud" class="hidden">
+    <aside id="scores" class="panel"><h3>Lost points</h3><ul id="score-list"></ul></aside>
+    <div id="toolbar">
+      <button id="btn-invites" class="hidden">Invite players</button>
+      <button id="btn-mute" title="Toggle sound (M)">Sound on</button>
+    </div>
+    <aside id="invites" class="panel hidden">
+      <div class="row between">
+        <h3>Invite players</h3>
+        <button id="btn-new-invite" class="primary">+ New invite</button>
+      </div>
+      <ol class="help">
+        <li>Create an invite and send its <b>offer code</b> to a player.</li>
+        <li>Paste the <b>answer code</b> they return and press Connect.</li>
+      </ol>
+      <div id="invite-list"></div>
+    </aside>
+    <p id="controls">Move: <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>A</kbd> <kbd>D</kbd></p>
+  </section>
+
+  <div id="toast" class="hidden" role="status"></div>
+  <div id="overlay" class="panel center hidden" role="alertdialog">
+    <h2 id="overlay-title"></h2>
+    <p id="overlay-text"></p>
+    <button id="btn-reload" class="primary">Back to menu</button>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
