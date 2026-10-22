@@ -92,7 +92,7 @@ export class HostSession {
       applyRoster(this.state, msg.players);
       this.broadcast('ctrl', { t: 'roster', rv: this.rv, players: msg.players });
     } else if (msg.t === 'tick') {
-      applySnapshot(this.state, msg.snap, this.rv, -1);
+      applySnapshot(this.state, msg.snap, this.rv, null);
       for (const e of msg.events) {
         this.hooks.onEvent?.(e);
         this.broadcast('ctrl', { t: 'ev', e: e.type, id: e.id, k: e.kind });
