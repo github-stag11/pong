@@ -18,7 +18,7 @@ Rules: every player defends one side of a polygon that gains a side per player (
 - Players connect directly over WebRTC. The host simulates the match and streams snapshots (30 Hz) over data channels; each player sends only their own paddle position.
 - Only public STUN servers are used (no TURN). Some networks (symmetric NAT, strict firewalls) will block direct connections.
 - If the host leaves, the remaining players see a "Disconnected" screen; reloading the page returns them to the menu.
-- Keep the host tab visible: browsers throttle background tabs, which pauses the host's simulation.
+- Keep the host tab visible for the best experience: the host's simulation runs in a Web Worker, but rendering and input still run on the page, which browsers pause in background tabs.
 - If two players press Play at the same moment, both may become host. Each host runs its own match.
 
 ## Develop
@@ -28,7 +28,7 @@ npm test        # unit tests (Node's built-in test runner, no dependencies)
 npm start       # serve at http://localhost:8080 (ES modules need http://)
 ```
 
-Layout: `src/game.js` (pure game logic), `src/lobby.js` (MQTT signaling), `src/session.js` (WebRTC host/client), `src/render.js`, `src/sound.js`, `src/main.js` (UI).
+Layout: `src/game.js` (pure game logic), `src/lobby.js` (MQTT signaling), `src/session.js` (WebRTC host/client), `src/sim-core.js` (host match simulation) and `src/sim-worker.js` (runs it in a Web Worker), `src/render.js`, `src/sound.js`, `src/main.js` (UI).
 
 ## Deploy
 

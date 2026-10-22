@@ -2,15 +2,14 @@
 // Both ends expose the same interface: state, myId, setInput(dir), tick(dt).
 // Offers and answers are exchanged by lobby.js; these classes only deal with SDP.
 import {
-  PADDLE_RATE, addPlayer, removePlayer, step, createState, exportRoster, applyRoster,
-  encodeSnapshot, applySnapshot, clampPos,
+  PADDLE_RATE, addPlayer, createState, applyRoster, applySnapshot, clampPos,
 } from './game.js';
+import { SNAPSHOT_INTERVAL } from './sim-core.js';
 
 // STUN only (no TURN relay): peers behind strict NATs/firewalls may be unable to connect.
 const RTC_CONFIG = {
   iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
 };
-const SNAPSHOT_INTERVAL = 1 / 30;
 const MAX_NAME = 16;
 const DISCONNECT_GRACE_MS = 10000;
 const JOIN_TIMEOUT_MS = 30000;
@@ -49,6 +48,7 @@ function parse(data) {
   try { return JSON.parse(data); } catch { return null; }
 }
 
+// The match simulation runs in sim-worker.js. This class keeps the WebRTC links and a mirror of the worker's state.
 export class HostSession {
   constructor(name, hooks = {}) {
     this.hooks = hooks;
@@ -56,28 +56,37 @@ export class HostSession {
     this.myId = 0;
     this.nextId = 1;
     this.rv = 0; // roster version
-    this.seq = 0;
-    this.acc = 0;
     this.peers = new Map();
-    addPlayer(this.state, 0, cleanName(name, 'Host'));
+    const hostName = cleanName(name, 'Host');
+    addPlayer(this.state, this.myId, hostName);
+    this.worker = new Worker(new URL('./sim-worker.js', import.meta.url), { type: 'module' });
+    this.worker.onmessage = ({ data }) => this.onSim(data);
+    this.worker.onerror = (e) => {
+      e.preventDefault?.();
+      this.hooks.onFailure?.(e.message || 'The match simulation stopped unexpectedly.');
+    };
+    this.worker.postMessage({ t: 'init', id: this.myId, name: hostName });
   }
 
   setInput(dir) {
-    const me = this.state.players.find((p) => p.id === this.myId);
-    if (me) me.input = dir;
+    this.worker.postMessage({ t: 'input', id: this.myId, dir });
   }
 
-  tick(dt) {
-    const events = step(this.state, dt);
-    for (const e of events) {
-      this.hooks.onEvent?.(e);
-      this.broadcast('ctrl', { t: 'ev', e: e.type, id: e.id });
-      if (e.type === 'miss') this.sendRoster();
-    }
-    this.acc += dt;
-    if (this.acc >= SNAPSHOT_INTERVAL) {
-      this.acc %= SNAPSHOT_INTERVAL;
-      this.broadcast('stream', encodeSnapshot(this.state, ++this.seq, this.rv));
+  // Nothing to advance here; the worker ticks on its own timer so it keeps running in background tabs.
+  tick() {}
+
+  onSim(msg) {
+    if (msg.t === 'roster') {
+      this.rv = msg.rv;
+      applyRoster(this.state, msg.players);
+      this.broadcast('ctrl', { t: 'roster', rv: this.rv, players: msg.players });
+    } else if (msg.t === 'tick') {
+      applySnapshot(this.state, msg.snap, this.rv, -1);
+      for (const e of msg.events) {
+        this.hooks.onEvent?.(e);
+        this.broadcast('ctrl', { t: 'ev', e: e.type, id: e.id });
+      }
+      if (msg.send) this.broadcast('stream', msg.snap);
     }
   }
 
@@ -86,10 +95,6 @@ export class HostSession {
     for (const peer of this.peers.values()) {
       if (peer.joined) send(peer[channel], text);
     }
-  }
-
-  sendRoster() {
-    this.broadcast('ctrl', { t: 'roster', rv: this.rv, players: exportRoster(this.state) });
   }
 
   notify(peer) {
@@ -109,17 +114,16 @@ export class HostSession {
       if (!msg || msg.t !== 'hello' || peer.joined || peer.status === 'closed') return;
       peer.joined = true;
       peer.name = cleanName(msg.name, `Player ${id}`);
-      addPlayer(this.state, id, peer.name);
-      this.rv++;
+      this.worker.postMessage({ t: 'add', id, name: peer.name });
       send(ctrl, { t: 'welcome', id });
-      this.sendRoster();
       peer.status = 'connected';
       this.notify(peer);
     };
     stream.onmessage = (ev) => {
       const msg = parse(ev.data);
-      const p = peer.joined && msg && this.state.players.find((q) => q.id === id);
-      if (p && 'p' in msg) p.pos = clampPos(msg.p);
+      if (peer.joined && msg && typeof msg === 'object' && 'p' in msg) {
+        this.worker.postMessage({ t: 'pos', id, pos: msg.p });
+      }
     };
     ctrl.onclose = () => this.drop(id, 'left');
 
@@ -150,15 +154,13 @@ export class HostSession {
     peer.pc.onconnectionstatechange = null;
     peer.pc.close();
     this.peers.delete(id);
-    if (wasJoined && removePlayer(this.state, id)) {
-      this.rv++;
-      this.sendRoster();
-    }
+    if (wasJoined) this.worker.postMessage({ t: 'remove', id });
     this.notify(peer);
   }
 
   close() {
     for (const id of [...this.peers.keys()]) this.drop(id, 'closed');
+    this.worker.terminate();
   }
 }
 

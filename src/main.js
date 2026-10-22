@@ -68,13 +68,26 @@ $('btn-play').onclick = async () => {
 
 async function hostGame(name) {
   setStatus('No match found. Starting one…');
-  session = new HostSession(name, { onEvent: playEvent, onPeer });
+  const host = (session = new HostSession(name, { onEvent: playEvent, onPeer, onFailure: onSimFailure }));
   lobby = await hostLobby({
     id: newId(),
     name: name || 'Host',
     onOffer: (sdp) => session.acceptOffer(sdp),
   });
+  if (session !== host) {
+    await lobby.close();
+    return;
+  }
   enterGame('Hosting. Waiting for players to join.');
+}
+
+function onSimFailure(message) {
+  if (inGame) {
+    session?.close();
+    endGame('Match stopped', message);
+  } else {
+    abortToMenu(message);
+  }
 }
 
 async function joinGame(name, host) {
