@@ -8,7 +8,7 @@ import { SNAPSHOT_INTERVAL } from './sim-core.js';
 
 // STUN finds public addresses; the TURN relay (Metered Open Relay) carries traffic for peers that cannot connect directly.
 const STUN_SERVERS = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
-const TURN_CREDENTIALS_URL = 'https://gia-pong.metered.live/api/v1/turn/credentials?apiKey=YOUR_METERED_API_KEY';
+const TURN_CREDENTIALS_URL = 'https://gia-pong.metered.live/api/v1/turn/credentials?apiKey=da877c2e305fbc83462073cac92842a98752';
 const MAX_NAME = 16;
 const DISCONNECT_GRACE_MS = 10000;
 const JOIN_TIMEOUT_MS = 30000;
