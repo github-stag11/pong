@@ -5,7 +5,6 @@ import {
   BALL_RADIUS, BASE_SPEED, MAX_SPEED, SERVE_DELAY,
   exportRoster, applyRoster, encodeSnapshot, applySnapshot,
 } from '../src/game.js';
-import { encodeSignal, decodeSignal } from '../src/signal.js';
 
 const makeState = (n) => {
   const s = createState();
@@ -132,15 +131,6 @@ test('snapshots round-trip and ignore mismatched rosters', () => {
 
   applySnapshot(client, [1, 2, NaN], 7, 0);
   assert.equal(client.ball.vy, 0.4, 'garbage snapshot ignored');
-});
-
-test('signal codes round-trip and reject garbage', async () => {
-  const msg = { type: 'offer', sdp: 'v=0\r\n'.repeat(200) };
-  const code = await encodeSignal(msg);
-  assert.match(code, /^[zp]\.[\w-]+$/);
-  assert.deepEqual(await decodeSignal(`  ${code.slice(0, 10)}\n${code.slice(10)} `), msg);
-  await assert.rejects(decodeSignal('hello world'), /not valid/);
-  await assert.rejects(decodeSignal('z.AAAA'), /not valid/);
 });
 
 test('ball radius is smaller than the shortest paddle', () => {

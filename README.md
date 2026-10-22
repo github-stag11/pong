@@ -4,9 +4,8 @@ Multiplayer Pong in a space-themed polygon arena. Plain HTML, CSS and JavaScript
 
 ## How to play
 
-1. **Host**: open the page, enter a callsign, press **Host a match**. In the *Invite players* panel, press **+ New invite** and send the **offer code** to a player.
-2. **Player**: press **Join a match**, paste the offer code, press **Create answer** and send the **answer code** back to the host.
-3. **Host**: paste the answer code into the invite and press **Connect**. Repeat for every player; players can join (or leave) at any time.
+1. **Everyone**: open the page, enter a callsign, press **Play**.
+2. If no match is running, you become the host and wait. Otherwise you join the match in progress automatically.
 
 Controls: `←` `→` or `A` `D` to move your paddle, `M` to mute.
 
@@ -14,10 +13,13 @@ Rules: every player defends one side of a polygon that gains a side per player (
 
 ## Networking notes
 
-- No game server and no signaling server: codes are exchanged manually.
-- The host simulates the match and streams snapshots (30 Hz) over WebRTC data channels; each player sends only their own paddle position.
+- There is one shared lobby. Players find the match through a public MQTT broker (`wss://broker.hivemq.com:8884/mqtt`) that only relays the connection setup (SDP offers and answers). No game traffic goes through the broker or any game server.
+- The lobby is open: anyone can see or inject messages on it, and the broker is a third-party service with no uptime guarantee.
+- Players connect directly over WebRTC. The host simulates the match and streams snapshots (30 Hz) over data channels; each player sends only their own paddle position.
 - Only public STUN servers are used (no TURN). Some networks (symmetric NAT, strict firewalls) will block direct connections.
+- If the host leaves, the remaining players see a "Disconnected" screen; reloading the page returns them to the menu.
 - Keep the host tab visible: browsers throttle background tabs, which pauses the host's simulation.
+- If two players press Play at the same moment, both may become host. Each host runs its own match.
 
 ## Develop
 
@@ -26,7 +28,7 @@ npm test        # unit tests (Node's built-in test runner, no dependencies)
 npm start       # serve at http://localhost:8080 (ES modules need http://)
 ```
 
-Layout: `src/game.js` (pure game logic), `src/session.js` (WebRTC host/client), `src/signal.js` (offer/answer codes), `src/render.js`, `src/sound.js`, `src/main.js` (UI).
+Layout: `src/game.js` (pure game logic), `src/lobby.js` (MQTT signaling), `src/session.js` (WebRTC host/client), `src/render.js`, `src/sound.js`, `src/main.js` (UI).
 
 ## Deploy
 

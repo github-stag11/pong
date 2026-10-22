@@ -1,10 +1,10 @@
 // WebRTC sessions. The host owns the simulation; clients send their paddle position and render snapshots.
 // Both ends expose the same interface: state, myId, setInput(dir), tick(dt).
+// Offers and answers are exchanged by lobby.js; these classes only deal with SDP.
 import {
   PADDLE_RATE, addPlayer, removePlayer, step, createState, exportRoster, applyRoster,
   encodeSnapshot, applySnapshot, clampPos,
 } from './game.js';
-import { encodeSignal, decodeSignal } from './signal.js';
 
 // STUN only (no TURN relay): peers behind strict NATs/firewalls may be unable to connect.
 const RTC_CONFIG = {
@@ -13,6 +13,7 @@ const RTC_CONFIG = {
 const SNAPSHOT_INTERVAL = 1 / 30;
 const MAX_NAME = 16;
 const DISCONNECT_GRACE_MS = 10000;
+const JOIN_TIMEOUT_MS = 30000;
 
 const cleanName = (n, fallback) => String(n ?? '').trim().slice(0, MAX_NAME) || fallback;
 
@@ -57,7 +58,7 @@ export class HostSession {
     this.rv = 0; // roster version
     this.seq = 0;
     this.acc = 0;
-    this.invites = new Map();
+    this.peers = new Map();
     addPlayer(this.state, 0, cleanName(name, 'Host'));
   }
 
@@ -82,8 +83,8 @@ export class HostSession {
 
   broadcast(channel, payload) {
     const text = JSON.stringify(payload);
-    for (const inv of this.invites.values()) {
-      if (inv.joined) send(inv[channel], text);
+    for (const peer of this.peers.values()) {
+      if (peer.joined) send(peer[channel], text);
     }
   }
 
@@ -91,33 +92,33 @@ export class HostSession {
     this.broadcast('ctrl', { t: 'roster', rv: this.rv, players: exportRoster(this.state) });
   }
 
-  notify(inv) {
-    this.hooks.onInvite?.(inv);
+  notify(peer) {
+    this.hooks.onPeer?.(peer);
   }
 
-  async createInvite() {
+  // Answers a player's offer and returns the answer SDP. The player becomes a match member once they say hello.
+  async acceptOffer(sdp) {
     const id = this.nextId++;
     const pc = new RTCPeerConnection(RTC_CONFIG);
     const { ctrl, stream } = openChannels(pc);
-    const inv = { id, pc, ctrl, stream, status: 'preparing', offer: '', joined: false, name: '' };
-    this.invites.set(id, inv);
-    this.notify(inv);
+    const peer = { id, pc, ctrl, stream, status: 'connecting', joined: false, name: '' };
+    this.peers.set(id, peer);
 
     ctrl.onmessage = (ev) => {
       const msg = parse(ev.data);
-      if (!msg || msg.t !== 'hello' || inv.joined || inv.status === 'closed') return;
-      inv.joined = true;
-      inv.name = cleanName(msg.name, `Player ${id}`);
-      addPlayer(this.state, id, inv.name);
+      if (!msg || msg.t !== 'hello' || peer.joined || peer.status === 'closed') return;
+      peer.joined = true;
+      peer.name = cleanName(msg.name, `Player ${id}`);
+      addPlayer(this.state, id, peer.name);
       this.rv++;
       send(ctrl, { t: 'welcome', id });
       this.sendRoster();
-      inv.status = 'connected';
-      this.notify(inv);
+      peer.status = 'connected';
+      this.notify(peer);
     };
     stream.onmessage = (ev) => {
       const msg = parse(ev.data);
-      const p = inv.joined && msg && this.state.players.find((q) => q.id === id);
+      const p = peer.joined && msg && this.state.players.find((q) => q.id === id);
       if (p && 'p' in msg) p.pos = clampPos(msg.p);
     };
     ctrl.onclose = () => this.drop(id, 'left');
@@ -130,47 +131,34 @@ export class HostSession {
         graceTimer = setTimeout(() => this.drop(id, 'failed'), DISCONNECT_GRACE_MS);
       }
     };
+    setTimeout(() => { if (!peer.joined) this.drop(id, 'timeout'); }, JOIN_TIMEOUT_MS);
 
-    await pc.setLocalDescription(await pc.createOffer());
+    await pc.setRemoteDescription({ type: 'offer', sdp });
+    await pc.setLocalDescription(await pc.createAnswer());
     await waitForIce(pc);
-    inv.offer = await encodeSignal({ type: 'offer', sdp: pc.localDescription.sdp });
-    inv.status = 'waiting';
-    this.notify(inv);
-    return inv;
-  }
-
-  async acceptAnswer(id, code) {
-    const inv = this.invites.get(id);
-    if (!inv || inv.status !== 'waiting') throw new Error('This invite is no longer open.');
-    const desc = await decodeSignal(code);
-    if (desc.type !== 'answer' || typeof desc.sdp !== 'string') {
-      throw new Error('That is not an answer code. Ask the player for the code they generated.');
-    }
-    await inv.pc.setRemoteDescription({ type: 'answer', sdp: desc.sdp });
-    inv.status = 'connecting';
-    this.notify(inv);
+    return pc.localDescription.sdp;
   }
 
   drop(id, reason) {
-    const inv = this.invites.get(id);
-    if (!inv || inv.status === 'closed') return;
-    const wasJoined = inv.joined;
-    inv.status = 'closed';
-    inv.joined = false;
-    inv.reason = wasJoined ? reason : 'cancelled';
-    inv.ctrl.onclose = null;
-    inv.pc.onconnectionstatechange = null;
-    inv.pc.close();
+    const peer = this.peers.get(id);
+    if (!peer || peer.status === 'closed') return;
+    const wasJoined = peer.joined;
+    peer.status = 'closed';
+    peer.joined = false;
+    peer.reason = reason;
+    peer.ctrl.onclose = null;
+    peer.pc.onconnectionstatechange = null;
+    peer.pc.close();
+    this.peers.delete(id);
     if (wasJoined && removePlayer(this.state, id)) {
       this.rv++;
       this.sendRoster();
     }
-    this.notify(inv);
-    this.invites.delete(id);
+    this.notify(peer);
   }
 
   close() {
-    for (const id of [...this.invites.keys()]) this.drop(id, 'closed');
+    for (const id of [...this.peers.keys()]) this.drop(id, 'closed');
   }
 }
 
@@ -187,11 +175,8 @@ export class ClientSession {
     this.closed = false;
   }
 
-  async accept(offerCode) {
-    const desc = await decodeSignal(offerCode);
-    if (desc.type !== 'offer' || typeof desc.sdp !== 'string') {
-      throw new Error('That is not an offer code. Paste the code the host generated for you.');
-    }
+  // Creates the offer SDP to send to the host. Call acceptAnswer() with the host's reply.
+  async createOffer() {
     const pc = (this.pc = new RTCPeerConnection(RTC_CONFIG));
     const { ctrl, stream } = openChannels(pc);
     this.ctrl = ctrl;
@@ -206,10 +191,13 @@ export class ClientSession {
       else if (pc.connectionState === 'closed') this.end('Connection closed.');
     };
 
-    await pc.setRemoteDescription({ type: 'offer', sdp: desc.sdp });
-    await pc.setLocalDescription(await pc.createAnswer());
+    await pc.setLocalDescription(await pc.createOffer());
     await waitForIce(pc);
-    return encodeSignal({ type: 'answer', sdp: pc.localDescription.sdp });
+    return pc.localDescription.sdp;
+  }
+
+  async acceptAnswer(sdp) {
+    await this.pc.setRemoteDescription({ type: 'answer', sdp });
   }
 
   onCtrl(msg) {

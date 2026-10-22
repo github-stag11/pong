@@ -17,48 +17,17 @@
     <label>Callsign
       <input id="name" maxlength="16" placeholder="Pilot" autocomplete="off">
     </label>
-    <div class="row">
-      <button id="btn-host" class="primary">Host a match</button>
-      <button id="btn-join">Join a match</button>
-    </div>
-    <p class="hint">Direct peer-to-peer connection &mdash; no game server. The host shares a code with each player by chat or e-mail.</p>
+    <button id="btn-play" class="primary">Play</button>
+    <p id="menu-status" class="status"></p>
+    <p class="hint">Press Play to join the match in progress, or start one if none is running. Players connect directly peer-to-peer. A public signaling broker only relays the connection setup.</p>
   </main>
-
-  <section id="join" class="panel center hidden">
-    <h2>Join a match</h2>
-    <ol class="steps">
-      <li>
-        <span>Paste the <b>offer code</b> from the host</span>
-        <textarea id="offer-in" rows="3" spellcheck="false" placeholder="z.…"></textarea>
-        <button id="btn-answer" class="primary">Create answer</button>
-      </li>
-      <li id="step-answer" class="hidden">
-        <span>Send this <b>answer code</b> back to the host</span>
-        <textarea id="answer-out" rows="3" readonly spellcheck="false"></textarea>
-        <button id="btn-copy-answer">Copy</button>
-      </li>
-    </ol>
-    <p id="join-status" class="status"></p>
-    <button id="btn-join-back" class="link">&larr; Back</button>
-  </section>
 
   <section id="hud" class="hidden">
     <aside id="scores" class="panel"><h3>Lost points</h3><ul id="score-list"></ul></aside>
     <div id="toolbar">
-      <button id="btn-invites" class="hidden">Invite players</button>
       <button id="btn-mute" title="Toggle sound (M)">Sound on</button>
     </div>
-    <aside id="invites" class="panel hidden">
-      <div class="row between">
-        <h3>Invite players</h3>
-        <button id="btn-new-invite" class="primary">+ New invite</button>
-      </div>
-      <ol class="help">
-        <li>Create an invite and send its <b>offer code</b> to a player.</li>
-        <li>Paste the <b>answer code</b> they return and press Connect.</li>
-      </ol>
-      <div id="invite-list"></div>
-    </aside>
+    <p id="role" class="role"></p>
     <p id="controls">Move: <kbd>&larr;</kbd> <kbd>&rarr;</kbd> or <kbd>A</kbd> <kbd>D</kbd></p>
   </section>
 

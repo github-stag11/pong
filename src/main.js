@@ -1,16 +1,23 @@
 import { HostSession, ClientSession } from './session.js';
+import { findHost, hostLobby, joinHost, newId } from './lobby.js';
 import { Renderer, playerColor } from './render.js';
 import { unlockAudio, playEvent, setMuted, isMuted } from './sound.js';
 
 const $ = (id) => document.getElementById(id);
 const show = (el, on = true) => el.classList.toggle('hidden', !on);
 
+const CONNECT_TIMEOUT_MS = 25000;
+
 const renderer = new Renderer($('stage'));
 let session = null;
+let lobby = null;
 let running = false;
+let inGame = false;
+let joining = false;
+let connectTimer = null;
 let lastSignature = '';
 
-// ---- Menu / join flow ----
+// ---- Menu / lobby flow ----
 
 const savedName = localStorage.getItem('spacepong.name');
 if (savedName) $('name').value = savedName;
@@ -20,129 +27,86 @@ const playerName = () => {
   return n;
 };
 
-$('btn-host').onclick = () => {
-  unlockAudio();
-  session = new HostSession(playerName(), { onEvent: playEvent, onInvite: renderInvite });
+const setStatus = (text, error = false) => {
+  const el = $('menu-status');
+  el.className = error ? 'status error' : 'status';
+  el.textContent = text;
+};
+
+function abortToMenu(message) {
+  clearTimeout(connectTimer);
+  session?.close();
+  session = null;
+  setStatus(message, true);
+  $('btn-play').disabled = false;
+  joining = false;
+}
+
+function enterGame(role) {
+  inGame = true;
+  joining = false;
   show($('menu'), false);
   show($('hud'));
-  show($('btn-invites'));
-  show($('invites'));
+  $('role').textContent = role;
   startLoop();
-  newInvite();
-};
+}
 
-$('btn-join').onclick = () => {
-  show($('menu'), false);
-  show($('join'));
-  $('offer-in').focus();
-};
-
-$('btn-join-back').onclick = () => location.reload();
-
-$('btn-answer').onclick = async () => {
+$('btn-play').onclick = async () => {
+  if (joining) return;
   unlockAudio();
-  const status = $('join-status');
-  status.className = 'status';
-  status.textContent = 'Preparing answer (gathering network candidates)…';
-  $('btn-answer').disabled = true;
+  const name = playerName();
+  joining = true;
+  $('btn-play').disabled = true;
   try {
-    session = new ClientSession(playerName(), {
-      onEvent: playEvent,
-      onJoined: () => {
-        show($('join'), false);
-        show($('hud'));
-        startLoop();
-      },
-      onClosed: (reason) => endGame('Disconnected', reason),
-    });
-    $('answer-out').value = await session.accept($('offer-in').value);
-    show($('step-answer'));
-    status.textContent = 'Send the answer code to the host. This page connects automatically once they accept it.';
+    const host = await findHost();
+    if (host) await joinGame(name, host);
+    else await hostGame(name);
   } catch (err) {
-    session?.close();
-    session = null;
-    status.className = 'status error';
-    status.textContent = err.message;
-    $('btn-answer').disabled = false;
+    abortToMenu(err.message);
   }
 };
 
-$('btn-copy-answer').onclick = () => copy($('answer-out').value, $('btn-copy-answer'));
-
-async function copy(text, button) {
-  try {
-    await navigator.clipboard.writeText(text);
-    const old = button.textContent;
-    button.textContent = 'Copied!';
-    setTimeout(() => (button.textContent = old), 1200);
-  } catch {
-    button.textContent = 'Select the text and copy manually';
-  }
+async function hostGame(name) {
+  setStatus('No match found. Starting one…');
+  session = new HostSession(name, { onEvent: playEvent, onPeer });
+  lobby = await hostLobby({
+    id: newId(),
+    name: name || 'Host',
+    onOffer: (sdp) => session.acceptOffer(sdp),
+  });
+  enterGame('Hosting. Waiting for players to join.');
 }
 
-// ---- Host invites ----
-
-const cards = new Map();
-const STATUS_TEXT = {
-  preparing: 'Preparing offer…',
-  waiting: 'Waiting for the player’s answer code',
-  connecting: 'Connecting…',
-  connected: 'Connected',
-};
-
-$('btn-new-invite').onclick = newInvite;
-$('btn-invites').onclick = () => show($('invites'), $('invites').classList.contains('hidden'));
-
-function newInvite() {
-  session.createInvite().catch((err) => toast(`Could not create invite: ${err.message}`));
+async function joinGame(name, host) {
+  setStatus(`Joining ${host.name || 'the match'}…`);
+  session = new ClientSession(name, {
+    onEvent: playEvent,
+    onJoined: () => {
+      clearTimeout(connectTimer);
+      enterGame(`Joined ${host.name || 'the match'}`);
+    },
+    onClosed: (reason) => (inGame ? endGame('Disconnected', reason) : abortToMenu(reason)),
+  });
+  const answer = await joinHost({
+    hostId: host.id,
+    playerId: newId(),
+    makeOffer: () => session.createOffer(),
+  });
+  await session.acceptAnswer(answer);
+  setStatus('Connecting…');
+  connectTimer = setTimeout(
+    () => abortToMenu('Could not connect directly to the host. Try Play again.'),
+    CONNECT_TIMEOUT_MS,
+  );
 }
 
-function renderInvite(inv) {
-  let card = cards.get(inv.id);
-  if (!card) {
-    card = document.createElement('div');
-    card.className = 'invite';
-    card.innerHTML = `
-      <header><strong></strong><span class="state"></span></header>
-      <textarea class="offer" rows="3" readonly spellcheck="false" placeholder="Preparing…"></textarea>
-      <div class="actions"><button class="copy">Copy offer</button><button class="cancel">Cancel</button></div>
-      <textarea class="answer" rows="3" spellcheck="false" placeholder="Paste the player’s answer code here"></textarea>
-      <div class="actions"><button class="connect primary">Connect</button></div>
-      <div class="error"></div>`;
-    card.querySelector('.copy').onclick = (e) => copy(inv.offer, e.target);
-    card.querySelector('.cancel').onclick = () => session.drop(inv.id, 'cancelled');
-    card.querySelector('.connect').onclick = async () => {
-      const err = card.querySelector('.error');
-      err.textContent = '';
-      try {
-        await session.acceptAnswer(inv.id, card.querySelector('.answer').value);
-      } catch (e) {
-        err.textContent = e.message;
-      }
-    };
-    cards.set(inv.id, card);
-    $('invite-list').prepend(card);
-  }
+window.addEventListener('pagehide', () => lobby?.close());
 
-  card.querySelector('strong').textContent = inv.name ? inv.name : `Invite #${inv.id}`;
-  card.querySelector('.offer').value = inv.offer;
-  const waiting = inv.status === 'waiting';
-  card.querySelector('.connect').disabled = !waiting;
-  card.querySelector('.answer').disabled = !waiting;
-  card.querySelector('.copy').disabled = !inv.offer;
-  card.classList.toggle('closed', inv.status === 'closed');
-  card.querySelector('.state').textContent =
-    inv.status === 'closed' ? (inv.reason === 'cancelled' ? 'Cancelled' : 'Left') : STATUS_TEXT[inv.status];
+// ---- Peer notices (host) ----
 
-  if (inv.status === 'connected') {
-    toast(`${inv.name} joined`);
-    setTimeout(() => card.remove(), 1500);
-    cards.delete(inv.id);
-  } else if (inv.status === 'closed') {
-    if (inv.reason !== 'cancelled') toast(`${inv.name || 'A player'} left`);
-    setTimeout(() => card.remove(), 1500);
-    cards.delete(inv.id);
-  }
+function onPeer(peer) {
+  if (peer.status === 'connected') toast(`${peer.name} joined`);
+  else if (peer.status === 'closed' && peer.name) toast(`${peer.name} left`);
 }
 
 // ---- Input ----
@@ -232,7 +196,6 @@ function toast(text) {
 function endGame(title, text) {
   running = false;
   show($('hud'), false);
-  show($('join'), false);
   $('overlay-title').textContent = title;
   $('overlay-text').textContent = text;
   show($('overlay'));

@@ -15,10 +15,9 @@ Create a playable, browser-based multiplayer Pong game with a space theme. Build
 
 ## Multiplayer and deployment
 
-- Use direct peer-to-peer browser connections; do not require a signaling or game server.
-- Host the static game files on GitHub Pages.
-- The host creates the match and manually shares a WebRTC offer with each player. Each player returns an answer to the host to connect.
-- The host device coordinates the match state. Game traffic travels over the peer connections rather than through a central game server.
+- Players find each other through a public MQTT broker (`wss://broker.hivemq.com:8884/mqtt`) that relays only the WebRTC connection setup. The lobby is one shared match: a player who presses Play joins the match in progress, or starts one if none is announced.
+- Game traffic travels over direct peer-to-peer connections. There is no game server, and the broker never sees game state.
+- The host device coordinates the match state.
 - A STUN service may be used to help peers connect over the internet. Do not use a TURN relay. Connections may not work on networks that block direct peer-to-peer traffic.
 
 ## Look and controls
