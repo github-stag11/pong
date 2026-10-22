@@ -6,10 +6,9 @@ import {
 } from './game.js';
 import { SNAPSHOT_INTERVAL } from './sim-core.js';
 
-// STUN only (no TURN relay): peers behind strict NATs/firewalls may be unable to connect.
-const RTC_CONFIG = {
-  iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
-};
+// STUN finds public addresses; the TURN relay (Metered Open Relay) carries traffic for peers that cannot connect directly.
+const STUN_SERVERS = ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'];
+const TURN_CREDENTIALS_URL = 'https://gia-pong.metered.live/api/v1/turn/credentials?apiKey=YOUR_METERED_API_KEY';
 const MAX_NAME = 16;
 const DISCONNECT_GRACE_MS = 10000;
 const JOIN_TIMEOUT_MS = 30000;
@@ -36,6 +35,18 @@ function waitForIce(pc, timeoutMs = 6000) {
     const timer = setTimeout(done, timeoutMs);
     pc.addEventListener('icegatheringstatechange', onChange);
   });
+}
+
+// Falls back to STUN only if the TURN credentials cannot be fetched.
+async function fetchIceServers() {
+  try {
+    const res = await fetch(TURN_CREDENTIALS_URL, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error(`TURN credentials: HTTP ${res.status}`);
+    const turn = await res.json();
+    return [{ urls: STUN_SERVERS }, ...turn];
+  } catch {
+    return [{ urls: STUN_SERVERS }];
+  }
 }
 
 function send(channel, payload) {
@@ -104,7 +115,7 @@ export class HostSession {
   // Answers a player's offer and returns the answer SDP. The player becomes a match member once they say hello.
   async acceptOffer(sdp) {
     const id = this.nextId++;
-    const pc = new RTCPeerConnection(RTC_CONFIG);
+    const pc = new RTCPeerConnection({ iceServers: await fetchIceServers() });
     const { ctrl, stream } = openChannels(pc);
     const peer = { id, pc, ctrl, stream, status: 'connecting', joined: false, name: '' };
     this.peers.set(id, peer);
@@ -179,7 +190,7 @@ export class ClientSession {
 
   // Creates the offer SDP to send to the host. Call acceptAnswer() with the host's reply.
   async createOffer() {
-    const pc = (this.pc = new RTCPeerConnection(RTC_CONFIG));
+    const pc = (this.pc = new RTCPeerConnection({ iceServers: await fetchIceServers() }));
     const { ctrl, stream } = openChannels(pc);
     this.ctrl = ctrl;
     this.stream = stream;

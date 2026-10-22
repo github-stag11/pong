@@ -13,10 +13,10 @@ Rules: every player defends one side of a polygon that gains a side per player (
 
 ## Networking notes
 
-- There is one shared lobby. Players find the match through a public MQTT broker (`wss://broker.hivemq.com:8884/mqtt`) that only relays the connection setup (SDP offers and answers). No game traffic goes through the broker or any game server.
+- There is one shared lobby. Players find the match through a public MQTT broker (`wss://broker.hivemq.com:8884/mqtt`) that only relays the connection setup (SDP offers and answers). The broker never sees game traffic and there is no game server.
 - The lobby is open: anyone can see or inject messages on it, and the broker is a third-party service with no uptime guarantee.
 - Players connect directly over WebRTC. The host simulates the match and streams snapshots (30 Hz) over data channels; each player sends only their own paddle position.
-- Only public STUN servers are used (no TURN). Some networks (symmetric NAT, strict firewalls) will block direct connections.
+- Public STUN servers help each player find their address. A TURN relay (Metered Open Relay, free tier: 20 GB/month) carries game traffic only for players whose networks block direct connections, so it can see that traffic. Its credentials are fetched from the browser and visible in the page source; if the free quota or key is abused, rotate the key in the Metered dashboard.
 - If the host leaves, the remaining players see a "Disconnected" screen; reloading the page returns them to the menu.
 - Keep the host tab visible for the best experience: the host's simulation runs in a Web Worker, but rendering and input still run on the page, which browsers pause in background tabs.
 - If two players press Play at the same moment, both may become host. Each host runs its own match.

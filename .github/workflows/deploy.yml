@@ -36,6 +36,11 @@ jobs:
           cp index.html _site/
           cp -r css src _site/
           touch _site/.nojekyll
+      - name: Inject TURN API key
+        env:
+          METERED_API_KEY: ${{ secrets.METERED_API_KEY }}
+        run: |
+          sed -i "s/YOUR_METERED_API_KEY/$METERED_API_KEY/" _site/src/session.js
       - uses: actions/upload-pages-artifact@v5
         with:
           path: _site

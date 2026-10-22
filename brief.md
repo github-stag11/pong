@@ -18,7 +18,7 @@ Create a playable, browser-based multiplayer Pong game with a space theme. Build
 - Players find each other through a public MQTT broker (`wss://broker.hivemq.com:8884/mqtt`) that relays only the WebRTC connection setup. The lobby is one shared match: a player who presses Play joins the match in progress, or starts one if none is announced.
 - Game traffic travels over direct peer-to-peer connections. There is no game server, and the broker never sees game state.
 - The host device coordinates the match state.
-- A STUN service may be used to help peers connect over the internet. Do not use a TURN relay. Connections may not work on networks that block direct peer-to-peer traffic.
+- A STUN service helps peers find each other over the internet. A TURN relay (Metered Open Relay, free tier) carries game traffic only for peers whose networks block a direct connection. The TURN credentials are fetched from the browser, so the site stays static.
 
 ## Look and controls
 
