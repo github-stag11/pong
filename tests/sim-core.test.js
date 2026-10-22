@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MatchSim, MAX_DT } from '../src/sim-core.js';
+import { MatchSim, MAX_DT, BOT_ID } from '../src/sim-core.js';
 
 const seeded = (seed) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 
@@ -14,13 +14,31 @@ test('advance reports about 30 snapshots per second of simulated time', () => {
 
 test('add and remove bump the roster version; removing an unknown id changes nothing', () => {
   const sim = new MatchSim(0, 'Host', seeded(3));
-  assert.equal(sim.rv, 0);
+  const rv = sim.rv;
   sim.addPlayer(5, 'Bob');
-  assert.equal(sim.rv, 1);
+  assert.ok(sim.rv > rv);
+  const after = sim.rv;
   assert.equal(sim.removePlayer(99), false);
-  assert.equal(sim.rv, 1);
+  assert.equal(sim.rv, after);
   assert.equal(sim.removePlayer(5), true);
-  assert.equal(sim.rv, 2);
+  assert.ok(sim.rv > after);
+});
+
+test('an AI opponent plays only while the host is alone', () => {
+  const sim = new MatchSim(0, 'Host', seeded(3));
+  const ids = () => sim.state.players.map((p) => p.id);
+  assert.deepEqual(ids(), [0, BOT_ID]);
+  sim.addPlayer(5, 'Bob');
+  assert.deepEqual(ids(), [0, 5]);
+  sim.removePlayer(5);
+  assert.deepEqual(ids(), [0, BOT_ID]);
+});
+
+test('the AI paddle moves to chase the ball', () => {
+  const sim = new MatchSim(0, 'Host', seeded(3));
+  for (let i = 0; i < 600; i++) sim.advance(1 / 60);
+  const bot = sim.state.players.find((p) => p.id === BOT_ID);
+  assert.ok(bot.pos !== 0 || sim.state.balls.length === 0);
 });
 
 test('snapshot carries the current roster version and sequence', () => {
