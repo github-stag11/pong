@@ -5,7 +5,7 @@
   "description": "Peer-to-peer multiplayer space Pong, deployable as a static site on GitHub Pages.",
   "type": "module",
   "scripts": {
-    "test": "node --test tests/",
+    "test": "node --test \"tests/*.test.js\"",
     "start": "node scripts/serve.js"
   },
   "engines": { "node": ">=20" }
